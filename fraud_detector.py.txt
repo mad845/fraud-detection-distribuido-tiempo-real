@@ -1,0 +1,32 @@
+fraud_detector.py - Motor doble en Spark + ML
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json
+from pyspark.sql.types import StructType, StringType, DoubleType
+import redis
+import xgboost as xgb
+import joblib
+
+Cargar modelo entrenado
+model = joblib.load('xgb_fraud_model.pkl')
+r = redis.Redis(host='localhost', port=6379)
+
+spark = SparkSession.builder.appName("FraudDetection").getOrCreate()
+
+Leer de Kafka en tiempo real
+df = spark.readStream.format("kafka").option("kafka.bootstrap.servers", "localhost:9092").option("subscribe", "transactions").load()
+
+MOTOR 1: Reglas rápidas <10ms
+def check_rules(transaction):
+    last_loc = r.get(f"user:{transaction['user_id']}:last_loc")
+    if last_loc and last_loc.decode() != transaction['location'] and transaction['amount'] > 50000:
+        return 1 # Fraude por geolocalización imposible
+    r.set(f"user:{transaction['user_id']}:last_loc", transaction['location'])
+    return 0
+
+MOTOR 2: ML Score
+def ml_score(features):
+    # features = [amount, hour, is_foreign_ip, etc]
+    return model.predict_proba([features])[0][1]
+
+Procesamiento en streaming
+Si score > 0.85 -> Enviar a tópico fraud_alerts
