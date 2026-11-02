@@ -1,0 +1,28 @@
+producer.py - Simula transacciones de Resistencia
+import json, time, random
+from kafka import KafkaProducer
+from faker import Faker
+
+producer = KafkaProducer(bootstrap_servers='localhost:9092',
+                         value_serializer=lambda v: json.dumps(v).encode('utf-8'))
+
+fake = Faker('es_AR')
+Coordenadas Resistencia aprox
+while True:
+    transaction = {
+        "transaction_id": fake.uuid4(),
+        "user_id": random.randint(1000, 1100),
+        "amount": random.choice([2000, 5000, 15000, 250000]),
+        "location": random.choice(["Resistencia - Av Chaco", "Resistencia - Av Castelli", "Miami, US"]),
+        "ip": fake.ipv4(),
+        "timestamp": time.time(),
+        "device": random.choice(["Android", "POS", "Web"])
+    }
+    # Inyectar fraude cada 20 transacciones
+    if random.randint(1,20) == 1:
+        transaction["amount"] = 250000
+        transaction["location"] = "Miami, US"
+    
+    producer.send('transactions', transaction)
+    print(f"Enviada: {transaction}")
+    time.sleep(0.5)
